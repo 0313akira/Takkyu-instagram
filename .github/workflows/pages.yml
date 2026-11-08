@@ -1,0 +1,35 @@
+# 卓球ストーリーメーカー（web）を GitHub Pages で公開する。
+# 初回だけ: リポジトリの Settings → Pages → Source を「GitHub Actions」にする。
+name: story-maker-pages
+on:
+  push:
+    paths: ["web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency: { group: pages, cancel-in-progress: true }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pages
+        run: |
+          mkdir -p _site
+          for f in index reel; do
+            {
+              echo '<!doctype html><html lang="ja"><head><meta charset="utf-8">'
+              echo '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+              echo '<style>:root{padding-top:env(safe-area-inset-top,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>'
+              echo '</head><body>'
+              cat "web/$f.html"
+              echo '</body></html>'
+            } > "_site/$f.html"
+          done
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+      - id: d
+        uses: actions/deploy-pages@v4
