@@ -7,6 +7,7 @@
 | メニュー | `web/index.html` | 作りたいものを選ぶトップページ |
 | ストーリーメーカー | `web/story.html` | オーダー用紙の写真から団体戦のオーダーを読み取り、ストーリー画像（1080×1920）を作る。スコアを選ぶだけで更新できる |
 | 大会報告フィード | `web/feed.html` | 集合写真の上下に帯を付け、大会名・会場・日付を入れたフィード画像（3:4／4:5／正方形）を作る。色は桜・紅葉・雪・北陸グリーン・ホワイト |
+| 得点入りゲーム動画 | `web/score.html` | 試合の動画を再生しながら得点ボタンを押し、得点（ゲームカウントも自動）と最初・最後の字幕が入った動画を書き出す。縦長リールと横長を選べる |
 | リールメーカー | `web/reel.html` | プレー動画に「選手 vs 選手」・見出し・チーム名の帯を付けて、リール用の縦長動画を書き出す |
 
 どちらも北陸大学のロゴと、スクールカラーの緑・金が最初から入っています。相手チームの色だけ選べます。
@@ -21,6 +22,7 @@
 - メニュー: https://0313akira.github.io/Takkyu-instagram/
 - ストーリー: https://0313akira.github.io/Takkyu-instagram/story.html
 - フィード: https://0313akira.github.io/Takkyu-instagram/feed.html
+- 得点入り動画: https://0313akira.github.io/Takkyu-instagram/score.html
 - リール: https://0313akira.github.io/Takkyu-instagram/reel.html
 
 GitHub Pages 版はログイン不要で誰でも使えます。オーダー用紙の写真の読み取りは Claude で開いたときだけ使えるので、Pages 版では名前を手で入力します。
