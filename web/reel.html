@@ -51,6 +51,7 @@ body {
   background: radial-gradient(circle at 35% 30%, #fff2c4, var(--ball) 55%, #8f6d16); box-shadow: 0 6px 14px rgba(0,0,0,.25);
 }
 .hero > * { position: relative; }
+.hero .back { position: absolute; top: 14px; right: 16px; color: inherit; font-size: .82rem; font-weight: 700; text-decoration: none; opacity: .85; }
 .hero .eyebrow { font-family: var(--num); letter-spacing: .18em; font-size: .78rem; opacity: .8; text-transform: uppercase; }
 .hero h1 { margin: 2px 0 6px; font-size: clamp(1.6rem, 6vw, 2.3rem); font-weight: 900; line-height: 1.2; text-wrap: balance; }
 .hero p { margin: 0; max-width: 34em; opacity: .9; font-size: .92rem; }
@@ -122,6 +123,7 @@ video { position: fixed; left: 0; bottom: 0; width: 2px; height: 2px; opacity: 0
 
 <div class="wrap">
   <header class="hero">
+    <a class="back" href="./">← メニュー</a>
     <div class="eyebrow">Table Tennis · Reel Maker</div>
     <h1>卓球リールメーカー</h1>
     <p>試合の動画を入れて選手名を打つだけで、上下にタイトル帯の付いた縦長のリール動画ができあがり。</p>

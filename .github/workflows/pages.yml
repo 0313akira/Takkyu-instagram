@@ -19,7 +19,7 @@ jobs:
       - name: Build pages
         run: |
           mkdir -p _site
-          for f in index reel; do
+          for f in index story feed reel; do
             {
               echo '<!doctype html><html lang="ja"><head><meta charset="utf-8">'
               echo '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'

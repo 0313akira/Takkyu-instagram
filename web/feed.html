@@ -1,0 +1,400 @@
+<title>大会報告フィードメーカー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Oswald:wght@500;700&display=swap">
+<style>
+/* Layout: ストーリーメーカーと同じ「手順カード → 完成画像」の並び。使い方を覚え直さなくて済むようにするため */
+:root {
+  --bg: #e9eef2; --surface: #ffffff; --ink: #122330; --muted: #5d6e7b; --line: #d3dce3;
+  --table: #1d5c3a; --table-deep: #0f3a24; --on-table: #ffffff; --ball: #c9a032; --win: #d7262e;
+  --font: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --num: "Oswald", "Noto Sans JP", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d151b; --surface: #16212a; --ink: #e6edf2; --muted: #91a2af; --line: #283843;
+    --table: #2a7a4e; --table-deep: #164a2f; --ball: #e0bb4a; --win: #ff5a5f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d151b; --surface: #16212a; --ink: #e6edf2; --muted: #91a2af; --line: #283843;
+  --table: #2a7a4e; --table-deep: #164a2f; --ball: #e0bb4a; --win: #ff5a5f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 110px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 18px; }
+.hero {
+  position: relative; overflow: hidden; border-radius: 16px; color: var(--on-table);
+  background: linear-gradient(160deg, var(--table), var(--table-deep));
+  padding: 26px 22px 24px; box-shadow: inset 0 0 0 5px rgba(255,255,255,.9);
+}
+.hero .back { position: absolute; top: 14px; right: 16px; color: inherit; font-size: .82rem; font-weight: 700; text-decoration: none; opacity: .85; }
+.hero .eyebrow { font-family: var(--num); letter-spacing: .18em; font-size: .78rem; opacity: .8; text-transform: uppercase; }
+.hero h1 { margin: 2px 0 6px; font-size: clamp(1.6rem, 6vw, 2.3rem); font-weight: 900; line-height: 1.2; text-wrap: balance; }
+.hero p { margin: 0; opacity: .9; }
+.cols { display: grid; gap: 18px; }
+@media (min-width: 880px) {
+  .cols { grid-template-columns: minmax(0, 1fr) 400px; align-items: start; }
+  .preview { position: sticky; top: 16px; }
+  .savebar { display: none !important; }
+}
+.form { display: grid; gap: 18px; min-width: 0; }
+.panel { background: var(--surface); border-radius: 14px; padding: 18px; display: grid; gap: 14px; min-width: 0; border: 1px solid var(--line); }
+.panel h2 { margin: 0; font-size: 1.02rem; font-weight: 900; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.step {
+  font-family: var(--num); font-weight: 700; font-size: .85rem; display: inline-grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%; color: #fff;
+  background: radial-gradient(circle at 35% 30%, #f3dc8e, var(--ball) 60%);
+}
+label { font-size: .78rem; color: var(--muted); font-weight: 700; display: grid; gap: 4px; }
+input[type=text], textarea, select {
+  font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid transparent; border-radius: 10px;
+  padding: 9px 11px; width: 100%; min-width: 0;
+}
+textarea { resize: vertical; line-height: 1.5; }
+input[type=text]:focus, textarea:focus, select:focus { border-color: var(--table); outline: none; background: var(--surface); }
+input[type=range] { width: 100%; accent-color: var(--table); }
+button:focus-visible, .drop:focus-within, .chip:focus-visible { outline: 3px solid var(--ball); outline-offset: 2px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+button {
+  font: inherit; font-weight: 700; border-radius: 10px; padding: 11px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+button.primary { background: var(--table); color: var(--on-table); border-color: var(--table); }
+button.big { padding: 14px; font-size: 1rem; }
+.drop {
+  position: relative; border: 2px dashed var(--line); border-radius: 12px; padding: 20px 14px; text-align: center; cursor: pointer;
+  display: grid; gap: 4px; justify-items: center; color: var(--muted); background: var(--bg);
+}
+.drop svg { width: 34px; height: 34px; color: var(--table); }
+.drop strong { color: var(--ink); font-size: 1rem; }
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 99px; font-size: .88rem; }
+.chip i { width: 18px; height: 18px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.chip[aria-pressed="true"] { border-color: var(--table); box-shadow: 0 0 0 2px var(--table); }
+.hint { font-size: .8rem; color: var(--muted); margin: 0; }
+.preview { display: grid; gap: 12px; }
+.preview canvas {
+  width: 100%; height: auto; border-radius: 10px; display: block; max-width: 100%;
+  box-shadow: 0 10px 30px rgba(10, 30, 50, .18); touch-action: none; cursor: grab;
+}
+.saved-img { width: 100%; border-radius: 10px; }
+.savebar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; gap: 10px;
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); border-top: 1px solid var(--line);
+}
+.savebar a { flex: 0 0 auto; display: grid; place-items: center; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-weight: 700; }
+.savebar button { flex: 1; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <a class="back" href="./">← メニュー</a>
+    <div class="eyebrow">Table Tennis · Feed Maker</div>
+    <h1>大会報告フィード</h1>
+    <p>集合写真を選んで、大会名・会場・日付を入れるだけ。上下の帯は自動で付きます。</p>
+  </header>
+
+  <div class="cols">
+    <div class="form">
+      <section class="panel">
+        <h2><span class="step">1</span>写真を選ぶ</h2>
+        <label class="drop">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <strong>写真を撮る・選ぶ</strong>
+          <span>集合写真がおすすめ</span>
+          <input type="file" id="photo" accept="image/*">
+        </label>
+        <label for="zoom">写真の大きさ <input type="range" id="zoom" min="100" max="250" value="100"></label>
+        <p class="hint">完成画像の写真を指でドラッグすると、位置をずらせます。</p>
+      </section>
+
+      <section class="panel">
+        <h2><span class="step">2</span>文字を入れる</h2>
+        <label for="title">大会名（改行すると2行になります）
+          <textarea id="title" rows="2" autocomplete="off" placeholder="第73回秋季北信越学生&#10;卓球選手権大会"></textarea>
+        </label>
+        <div class="row2">
+          <label for="venue">会場 <input type="text" id="venue" autocomplete="off" placeholder="新潟市鳥屋野総合体育館"></label>
+          <label for="date">日付 <input type="text" id="date" autocomplete="off" placeholder="5月8日〜10日"></label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="step">3</span>デザインを選ぶ</h2>
+        <label>色（季節）</label>
+        <div class="chips" id="themes" role="group" aria-label="色"></div>
+        <label>画像の形</label>
+        <div class="chips" id="sizes" role="group" aria-label="画像の形"></div>
+      </section>
+    </div>
+
+    <aside class="panel preview" id="preview">
+      <h2>完成画像</h2>
+      <canvas id="cv" width="1080" height="1440" aria-label="フィード画像のプレビュー"></canvas>
+      <button class="primary big" id="saveBtn">画像を保存</button>
+      <p class="hint" id="saveHint">保存したら、インスタの投稿で画像を選ぶだけです。</p>
+      <img class="saved-img" id="fallbackImg" alt="完成したフィード画像" hidden>
+    </aside>
+  </div>
+</div>
+
+<div class="savebar">
+  <a href="#preview">見る</a>
+  <button class="primary big" id="saveBtn2">画像を保存</button>
+</div>
+
+<script>
+const JP = '"Noto Sans JP", "Hiragino Sans", sans-serif';
+const $ = (id) => document.getElementById(id);
+
+// 帯の色は、これまでの投稿で使ってきた季節ごとの雰囲気（桜・紅葉・雪）に合わせている。
+// 部の色（緑）とシンプルな白も選べるようにして、季節に関係ない大会でも使えるようにする。
+const THEMES = [
+  { id: "sakura", name: "桜", from: "#f7a8c4", to: "#fff0f5", text: "#5a0f24", stroke: "#ffffff", deco: "#f06292" },
+  { id: "autumn", name: "紅葉", from: "#f6c26b", to: "#fff4dc", text: "#5b2a06", stroke: "#ffffff", deco: "#e8711c" },
+  { id: "snow",   name: "雪",   from: "#a9d8f2", to: "#f2fbff", text: "#123d63", stroke: "#ffffff", deco: "#5fa8d8" },
+  { id: "green",  name: "北陸グリーン", from: "#1d5c3a", to: "#0f3a24", text: "#ffffff", stroke: "#0b2a1a", deco: "#e0bb4a" },
+  { id: "white",  name: "ホワイト", from: "#ffffff", to: "#eef2f5", text: "#122330", stroke: "#ffffff", deco: "#1d5c3a" },
+];
+// 3:4 はインスタのプロフィール一覧で切れずに表示される形。ほかの形も残しておく
+const SIZES = [
+  { id: "3x4", name: "縦長 3:4", w: 1080, h: 1440 },
+  { id: "4x5", name: "縦長 4:5", w: 1080, h: 1350 },
+  { id: "1x1", name: "正方形", w: 1080, h: 1080 },
+];
+
+// ---------- state ----------
+const EXAMPLE = {
+  title: "第73回春季北信越学生\n卓球選手権大会", venue: "新潟市鳥屋野総合体育館", date: "5月8日〜10日",
+  theme: "sakura", size: "3x4",
+};
+function load(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
+function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+// 写真は容量が大きく保存できないことがあるので、文字とデザインだけ覚えておく
+const state = Object.assign({}, EXAMPLE, load("feed-state") || {});
+let photo = null;
+const view = { zoom: 1, offsetX: 0, offsetY: 0 };
+
+const cv = $("cv"), ctx = cv.getContext("2d");
+const theme = () => THEMES.find(t => t.id === state.theme) || THEMES[0];
+const size = () => SIZES.find(s => s.id === state.size) || SIZES[0];
+
+// ---------- drawing ----------
+// 1. 帯の高さを決める → 2. 写真 → 3. 帯と飾り → 4. 文字 の順に描く（文字を一番上に重ねるため）
+function layout() {
+  const { w, h } = size();
+  const square = h <= w;
+  return { w, h, top: Math.round(h * (square ? 0.2 : 0.19)), bottom: Math.round(h * (square ? 0.15 : 0.14)) };
+}
+function fitFont(c, text, start, maxWidth, min = 28) {
+  let s = start;
+  for (; s > min; s -= 2) { c.font = `900 ${s}px ${JP}`; if (c.measureText(text).width <= maxWidth) break; }
+  c.font = `900 ${s}px ${JP}`;
+  return s;
+}
+function outlinedText(c, text, x, y, fontSize, t) {
+  // 写真の上や淡い帯の上でも読めるように、白（緑テーマは濃い緑）の縁取りを付ける
+  c.lineJoin = "round"; c.lineWidth = Math.max(6, fontSize * 0.16); c.strokeStyle = t.stroke;
+  c.strokeText(text, x, y);
+  c.fillStyle = t.text; c.fillText(text, x, y);
+}
+function drawPhoto(c, L) {
+  const area = { x: 0, y: L.top, w: L.w, h: L.h - L.top - L.bottom };
+  c.save();
+  c.beginPath(); c.rect(area.x, area.y, area.w, area.h); c.clip();
+  if (!photo) {
+    c.fillStyle = "#c9d3db"; c.fillRect(area.x, area.y, area.w, area.h);
+    c.fillStyle = "#5d6e7b"; c.textAlign = "center"; c.textBaseline = "middle";
+    c.font = `700 48px ${JP}`; c.fillText("ここに写真が入ります", L.w / 2, area.y + area.h / 2);
+  } else {
+    // 枠いっぱいに敷き詰め（余白を作らない）、はみ出た分だけドラッグで動かせる
+    const cover = Math.max(area.w / photo.width, area.h / photo.height) * view.zoom;
+    const drawWidth = photo.width * cover, drawHeight = photo.height * cover;
+    const maxShiftX = (drawWidth - area.w) / 2, maxShiftY = (drawHeight - area.h) / 2;
+    view.offsetX = Math.max(-maxShiftX, Math.min(maxShiftX, view.offsetX));
+    view.offsetY = Math.max(-maxShiftY, Math.min(maxShiftY, view.offsetY));
+    c.drawImage(photo, area.x + (area.w - drawWidth) / 2 + view.offsetX, area.y + (area.h - drawHeight) / 2 + view.offsetY, drawWidth, drawHeight);
+  }
+  c.restore();
+}
+function band(c, y, height, t, flip) {
+  const g = c.createLinearGradient(0, flip ? y + height : y, 0, flip ? y : y + height);
+  g.addColorStop(0, t.from); g.addColorStop(1, t.to);
+  c.fillStyle = g; c.fillRect(0, y, c.canvas.width, height);
+}
+// 飾りは帯の端にだけ置き、文字の邪魔にならないようにする
+function petal(c, x, y, r, angle) {
+  c.save(); c.translate(x, y); c.rotate(angle);
+  c.beginPath(); c.ellipse(0, 0, r, r * 0.6, 0, 0, Math.PI * 2); c.fill();
+  c.restore();
+}
+function leaf(c, x, y, r, angle) {
+  c.save(); c.translate(x, y); c.rotate(angle); c.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const radius = i % 2 ? r * 0.45 : r, a = -Math.PI / 2 + i * Math.PI / 5;
+    c.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
+  }
+  c.closePath(); c.fill(); c.restore();
+}
+function snowflake(c, x, y, r) {
+  c.save(); c.translate(x, y); c.lineWidth = Math.max(3, r * 0.12); c.lineCap = "round";
+  for (let i = 0; i < 6; i++) {
+    c.rotate(Math.PI / 3);
+    c.beginPath(); c.moveTo(0, 0); c.lineTo(0, -r);
+    c.moveTo(0, -r * 0.55); c.lineTo(-r * 0.25, -r * 0.8); c.moveTo(0, -r * 0.55); c.lineTo(r * 0.25, -r * 0.8);
+    c.stroke();
+  }
+  c.restore();
+}
+function decorations(c, L, t) {
+  c.save(); c.fillStyle = t.deco; c.strokeStyle = t.deco; c.globalAlpha = 0.85;
+  const spots = [ // [x, y(帯の中の割合), 大きさ, 回転]。上の帯は右上、下の帯は左下に寄せる
+    [L.w - 60, L.top * 0.22, 26, 0.4], [L.w - 120, L.top * 0.12, 16, 1.2], [L.w - 30, L.top * 0.55, 14, 2.1],
+    [50, L.h - L.bottom * 0.3, 24, 0.9], [110, L.h - L.bottom * 0.15, 15, 2.4], [30, L.h - L.bottom * 0.7, 13, 0.2],
+  ];
+  for (const [x, y, r, angle] of spots) {
+    if (t.id === "sakura") petal(c, x, y, r, angle);
+    else if (t.id === "autumn") leaf(c, x, y, r * 1.2, angle);
+    else if (t.id === "snow") snowflake(c, x, y, r * 1.1);
+  }
+  if (t.id === "green" || t.id === "white") {
+    // 季節感のないテーマは、帯のふちに細い線を引くだけにして落ち着いた印象にする
+    c.globalAlpha = 1; c.fillRect(0, L.top - 10, L.w, 4); c.fillRect(0, L.h - L.bottom + 6, L.w, 4);
+  }
+  c.restore();
+}
+function drawTexts(c, L, t) {
+  c.textBaseline = "middle";
+  const margin = 50, maxWidth = L.w - margin * 2;
+  // 1. 大会名：行数に合わせて大きさを決め、横幅からはみ出る行だけ小さくする
+  const lines = state.title.split("\n").map(s => s.trim()).filter(Boolean).slice(0, 3);
+  if (lines.length) {
+    const lineHeight = (L.top * 0.86) / lines.length;
+    c.textAlign = "center";
+    lines.forEach((line, index) => {
+      const fontSize = fitFont(c, line, Math.min(lineHeight * 0.8, 110), maxWidth);
+      outlinedText(c, line, L.w / 2, L.top * 0.07 + lineHeight * (index + 0.5), fontSize, t);
+    });
+  }
+  // 2. 会場と日付：これまでの投稿と同じく右寄せにする
+  const venue = state.venue.trim() ? (/^[@＠]/.test(state.venue.trim()) ? state.venue.trim() : "@" + state.venue.trim()) : "";
+  const rows = [venue, state.date.trim()].filter(Boolean);
+  const rowHeight = (L.bottom * 0.8) / Math.max(rows.length, 1);
+  c.textAlign = "right";
+  rows.forEach((row, index) => {
+    const fontSize = fitFont(c, row, Math.min(rowHeight * 0.72, 64), maxWidth - 140);
+    outlinedText(c, row, L.w - margin, L.h - L.bottom + L.bottom * 0.1 + rowHeight * (index + 0.5) + 6, fontSize, t);
+  });
+}
+function draw() {
+  const L = layout(), t = theme();
+  if (cv.width !== L.w || cv.height !== L.h) { cv.width = L.w; cv.height = L.h; }
+  ctx.clearRect(0, 0, L.w, L.h);
+  drawPhoto(ctx, L);
+  band(ctx, 0, L.top, t, false);
+  band(ctx, L.h - L.bottom, L.bottom, t, true);
+  // 写真と帯の境目に白い線を入れて、写真がくっきり見えるようにする
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, L.top - 3, L.w, 6); ctx.fillRect(0, L.h - L.bottom - 3, L.w, 6);
+  decorations(ctx, L, t);
+  drawTexts(ctx, L, t);
+}
+
+// ---------- form ----------
+function renderChips(containerId, items, key) {
+  const box = $(containerId); box.innerHTML = "";
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "chip";
+    button.setAttribute("aria-pressed", String(state[key] === item.id));
+    if (item.from) { const dot = document.createElement("i"); dot.style.background = `linear-gradient(135deg, ${item.from}, ${item.to})`; button.append(dot); }
+    button.append(item.name);
+    button.onclick = () => handleChoose(key, item.id);
+    box.append(button);
+  }
+}
+function handleChoose(key, id) {
+  state[key] = id; store("feed-state", state);
+  renderChips("themes", THEMES, "theme"); renderChips("sizes", SIZES, "size");
+  draw();
+}
+function handleTextInput() {
+  state.title = $("title").value; state.venue = $("venue").value; state.date = $("date").value;
+  store("feed-state", state); draw();
+}
+$("title").value = state.title; $("venue").value = state.venue; $("date").value = state.date;
+for (const id of ["title", "venue", "date"]) $(id).oninput = handleTextInput;
+
+$("photo").onchange = (event) => {
+  const file = event.target.files[0]; if (!file) return;
+  const image = new Image();
+  image.onload = () => { photo = image; view.zoom = 1; view.offsetX = 0; view.offsetY = 0; $("zoom").value = 100; draw(); };
+  image.src = URL.createObjectURL(file);
+};
+$("zoom").oninput = (event) => { view.zoom = event.target.value / 100; draw(); };
+
+// 写真の位置はスライダーより指で動かすほうが直感的なので、プレビューをドラッグして動かす
+let dragStart = null;
+cv.addEventListener("pointerdown", (event) => {
+  if (!photo) return;
+  cv.setPointerCapture(event.pointerId);
+  dragStart = { x: event.clientX, y: event.clientY, offsetX: view.offsetX, offsetY: view.offsetY };
+});
+cv.addEventListener("pointermove", (event) => {
+  if (!dragStart) return;
+  const scale = cv.width / cv.getBoundingClientRect().width;
+  view.offsetX = dragStart.offsetX + (event.clientX - dragStart.x) * scale;
+  view.offsetY = dragStart.offsetY + (event.clientY - dragStart.y) * scale;
+  draw();
+});
+const handleDragEnd = () => { dragStart = null; };
+cv.addEventListener("pointerup", handleDragEnd);
+cv.addEventListener("pointercancel", handleDragEnd);
+
+// ---------- saving ----------
+let downloads = null;
+async function handleSave() {
+  draw();
+  const blob = await new Promise(resolve => cv.toBlob(resolve, "image/png"));
+  const firstLine = state.title.split("\n")[0].trim() || "feed";
+  const name = `${firstLine}.png`.replace(/[\\/:*?"<>|\s]/g, "_");
+  const hint = $("saveHint");
+  if (downloads) {
+    try { await downloads.save({ filename: name, data: blob }); hint.textContent = "保存しました。インスタの投稿で画像を選んでください。"; return; }
+    catch (error) { if (error?.code === "declined") return; }
+  } else if (!window.claude) {
+    // スマホでは共有メニューを出すと、そのまま「Instagram」や「画像を保存」を選べて手間が少ない
+    const file = new File([blob], name, { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); hint.textContent = "共有メニューから「Instagram」や「画像を保存」を選べます。"; return; }
+      catch (error) { if (error?.name === "AbortError") return; }
+    }
+    const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
+    document.body.append(link); link.click(); link.remove();
+  }
+  const image = $("fallbackImg"); image.src = URL.createObjectURL(blob); image.hidden = false;
+  hint.textContent = "保存されない場合は、下の画像を長押しして保存してください。";
+  if (matchMedia("(max-width: 879px)").matches) $("preview").scrollIntoView({ behavior: "smooth" });
+}
+$("saveBtn").onclick = handleSave;
+$("saveBtn2").onclick = handleSave;
+
+// ---------- boot ----------
+renderChips("themes", THEMES, "theme");
+renderChips("sizes", SIZES, "size");
+draw();
+// Webフォントの読み込みが終わる前に描くと別の字体になるので、読み込み後に描き直す
+document.fonts.load(`900 80px "Noto Sans JP"`, "第回春季北信越学生卓球選手権大会体育館月日").then(draw).catch(() => {});
+(async () => {
+  if (!window.claude) return;
+  downloads = await claude.use("downloads").catch(() => null);
+})();
+</script>
