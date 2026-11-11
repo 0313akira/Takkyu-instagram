@@ -100,6 +100,11 @@ button:disabled { opacity: .5; cursor: default; }
 .events li time { font-family: var(--num); font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer; text-decoration: underline dotted; }
 .events li button { padding: 2px 8px; border: none; background: none; color: var(--muted); font-size: 1.1rem; }
 .events:empty::before { content: "まだ得点を記録していません"; color: var(--muted); font-size: .85rem; }
+#rallies:empty::before { content: "ラリーを記録していないので、使う範囲をそのまま書き出します"; }
+/* ラリーボタンは押しっぱなしで使うので、長押しで文字選択やメニューが出ないようにする */
+.rally { padding: 18px 8px; font-size: 1.05rem; border: 2px solid var(--ball); color: var(--ink); background: var(--surface); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
+.rally[aria-pressed="true"] { background: var(--err); border-color: var(--err); color: #fff; }
+.cutinfo { font-size: .85rem; margin: 0; font-family: var(--num); font-variant-numeric: tabular-nums; }
 .progress { height: 8px; border-radius: 8px; background: var(--bg); overflow: hidden; }
 .progress i { display: block; height: 100%; width: 0; background: var(--ball); }
 .savebar {
@@ -119,7 +124,7 @@ video { position: fixed; left: 0; bottom: 0; width: 2px; height: 2px; opacity: 0
     <a class="back" href="./">← メニュー</a>
     <div class="eyebrow">Table Tennis · Score Video</div>
     <h1>得点入りゲーム動画</h1>
-    <p>試合の動画を再生しながら、点を取った選手のボタンを押すだけ。得点が入った動画を書き出せます。</p>
+    <p>試合の動画を再生しながら、ラリーの間だけボタンを押しっぱなし、点が決まったら選手のボタンを押すだけ。ラリーだけをつないだ得点入り動画を1回で書き出せます。</p>
   </header>
 
   <div class="cols">
@@ -163,9 +168,15 @@ video { position: fixed; left: 0; bottom: 0; width: 2px; height: 2px; opacity: 0
       </section>
 
       <section class="panel">
-        <h2><span class="step">3</span>得点の記録</h2>
-        <p class="hint">完成動画の下の「再生」を押し、点が決まったら、点を取った選手のボタンを押してください。11点以上で2点差がつくと、自動で次のゲームに進みます。時間を押すと、その場面に移動します。</p>
+        <h2><span class="step">3</span>ラリーと得点の記録</h2>
+        <p class="hint">完成動画の下の「再生」を押して、次のように記録します。</p>
+        <p class="hint">・ラリーの間だけ「ラリー中」を押しっぱなし（タップすると押したまま扱い、もう一度タップで終わり）。記録したラリーだけをつないで書き出すので、ラリーカットした動画を先に作る必要はありません。<br>・点が決まったら、点を取った選手のボタン（ラリー中なら、そこでラリーも終わります）。11点以上で2点差がつくと、自動で次のゲームに進みます。</p>
+        <h3 class="hint" style="margin:4px 0 0;font-weight:700;color:var(--ink)">ラリー</h3>
+        <p class="cutinfo" id="cutInfo"></p>
+        <ol class="events" id="rallies"></ol>
+        <h3 class="hint" style="margin:4px 0 0;font-weight:700;color:var(--ink)">得点</h3>
         <ol class="events" id="events"></ol>
+        <p class="hint">時間を押すと、その場面に移動します。</p>
         <button id="clearBtn">記録をすべて消す</button>
       </section>
 
@@ -183,7 +194,9 @@ video { position: fixed; left: 0; bottom: 0; width: 2px; height: 2px; opacity: 0
         <button class="narrow" id="backBtn" disabled>−5秒</button>
         <button id="playBtn" disabled>再生</button>
       </div>
+      <label class="check" for="cutPreview"><input type="checkbox" id="cutPreview"> ラリーだけ再生（カット後の確認）</label>
       <p class="now" id="now" aria-live="polite"></p>
+      <button class="rally" id="rallyBtn" aria-pressed="false" disabled>ラリー中（押しっぱなし）</button>
       <div class="scorepad">
         <button class="point" id="pointA" disabled>＋1 選手1</button>
         <button class="point" id="pointB" disabled>＋1 選手2</button>
@@ -226,6 +239,55 @@ const state = Object.assign({}, DEFAULT, load("score-state") || {});
 // 得点の記録 { time: 動画の秒数, player: 0 か 1 }。動画ごとに保存し、読み込み直しても消えないようにする
 let events = [];
 let eventsKey = null;
+// ラリー区間 { start, end }（動画の秒数）。記録があれば、この区間だけをつないで再生・書き出しする
+let rallies = [];
+let rallyStart = null;      // 今ラリー中なら、その始まりの秒数
+let rallyPressedAt = 0;     // 押しっぱなしかタップかを見分けるため、押した時刻を覚えておく
+
+// ---------- rally segments ----------
+// 書き出す区間。ラリーの記録がなければ「使う範囲」をそのまま1本の区間として扱う（今までと同じ動き）
+function segments() {
+  const [start, end] = range();
+  if (!rallies.length) return [{ start, end }];
+  return rallies
+    .map(rally => ({ start: Math.max(rally.start, start), end: Math.min(rally.end, end) }))
+    .filter(rally => rally.end - rally.start > 0.2);
+}
+function totalLength() { return segments().reduce((sum, segment) => sum + segment.end - segment.start, 0); }
+// 元の動画の秒数 → 書き出した動画の何秒目か。字幕を「書き出した動画の最初と最後の4秒」に出すために使う
+function outputTime(time) {
+  let passed = 0;
+  for (const segment of segments()) {
+    if (time < segment.start) return passed;
+    if (time <= segment.end) return passed + time - segment.start;
+    passed += segment.end - segment.start;
+  }
+  return passed;
+}
+function addRally(start, end) {
+  if (end - start < 0.3) return; // 押し間違いの一瞬だけの区間は残さない
+  rallies.push({ start: Math.round(start * 10) / 10, end: Math.round(end * 10) / 10 });
+  // 重なった区間はまとめる（同じ場面を2回つながないように）
+  rallies.sort((first, second) => first.start - second.start);
+  rallies = rallies.reduce((merged, rally) => {
+    const last = merged[merged.length - 1];
+    if (last && rally.start <= last.end) last.end = Math.max(last.end, rally.end); else merged.push({ ...rally });
+    return merged;
+  }, []);
+}
+function beginRally() {
+  if (!vid.src || rallyStart !== null) return;
+  rallyStart = vid.currentTime;
+  $("rallyBtn").setAttribute("aria-pressed", "true"); $("rallyBtn").textContent = "ラリー中…（離す・タップで終わり）";
+  updateNow();
+}
+function endRally() {
+  if (rallyStart === null) return;
+  addRally(rallyStart, vid.currentTime);
+  rallyStart = null;
+  $("rallyBtn").setAttribute("aria-pressed", "false"); $("rallyBtn").textContent = "ラリー中（押しっぱなし）";
+  saveEvents();
+}
 
 // ---------- score ----------
 // 得点もゲーム数も保存せず、記録から毎回計算する（押し間違いを消したときに数字がずれないようにするため）
@@ -297,11 +359,31 @@ function renderEvents() {
     item.append(time, text, remove); list.append(item);
   });
   $("undoBtn").disabled = !events.length || !vid.src;
+  renderRallies();
   updateNow();
 }
-function saveEvents() { if (eventsKey) store(eventsKey, events); renderEvents(); redraw(); }
+function renderRallies() {
+  const list = $("rallies"); list.innerHTML = "";
+  rallies.forEach((rally, index) => {
+    const item = document.createElement("li");
+    const time = document.createElement("time"); time.textContent = formatTime(rally.start);
+    time.onclick = () => handleJump(rally.start);
+    const text = document.createElement("span");
+    text.textContent = `ラリー${index + 1}：${formatTime(rally.start)} 〜 ${formatTime(rally.end)}（${(rally.end - rally.start).toFixed(1)}秒）`;
+    const remove = document.createElement("button"); remove.textContent = "×"; remove.setAttribute("aria-label", "このラリーを消す");
+    remove.onclick = () => { rallies.splice(index, 1); saveEvents(); };
+    item.append(time, text, remove); list.append(item);
+  });
+  const [start, end] = range();
+  $("cutInfo").textContent = rallies.length
+    ? `書き出す長さ ${totalLength().toFixed(1)}秒（元の範囲 ${(end - start).toFixed(1)}秒）`
+    : "";
+}
+function saveEvents() { if (eventsKey) store(eventsKey, { events, rallies }); renderEvents(); redraw(); }
 function handleAddPoint(player) {
   if (!vid.src) return;
+  // 点が決まった＝ラリーが終わった、なので押しっぱなしを離し忘れていてもここで区切る
+  endRally();
   events.push({ time: Math.round(vid.currentTime * 10) / 10, player });
   events.sort((first, second) => first.time - second.time);
   saveEvents();
@@ -316,9 +398,26 @@ function handleUndo() {
 }
 function handleRemoveEvent(index) { events.splice(index, 1); saveEvents(); }
 function handleClearEvents() {
-  if (!events.length || !confirm("得点の記録をすべて消しますか？")) return;
-  events = []; saveEvents();
+  if ((!events.length && !rallies.length) || !confirm("ラリーと得点の記録をすべて消しますか？")) return;
+  events = []; rallies = []; rallyStart = null; saveEvents();
 }
+// 押しっぱなし：離したら終わり。短いタップ：押したままの扱いにして、次のタップで終わり（片手で持ちながらでも使えるように）
+$("rallyBtn").addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  $("rallyBtn").setPointerCapture?.(event.pointerId);
+  if (rallyStart !== null) { endRally(); rallyPressedAt = 0; return; }
+  rallyPressedAt = performance.now();
+  beginRally();
+});
+const handleRallyRelease = () => {
+  if (!rallyPressedAt) return;
+  const heldMilliseconds = performance.now() - rallyPressedAt;
+  rallyPressedAt = 0;
+  if (heldMilliseconds > 350) endRally();
+};
+$("rallyBtn").addEventListener("pointerup", handleRallyRelease);
+$("rallyBtn").addEventListener("pointercancel", handleRallyRelease);
+$("rallyBtn").addEventListener("contextmenu", (event) => event.preventDefault());
 async function handleJump(time) { vid.pause(); await seekTo(time); updateNow(); }
 $("pointA").onclick = () => handleAddPoint(0);
 $("pointB").onclick = () => handleAddPoint(1);
@@ -327,7 +426,8 @@ $("clearBtn").onclick = handleClearEvents;
 function updateNow() {
   if (!vid.src) { $("now").textContent = ""; return; }
   const { points, games } = scoreAt(vid.currentTime);
-  $("now").textContent = `${formatTime(vid.currentTime)}　${points[0]} - ${points[1]}（ゲーム ${games[0]}-${games[1]}）`;
+  const rallyMark = rallyStart !== null ? "　● ラリー中" : "";
+  $("now").textContent = `${formatTime(vid.currentTime)}　${points[0]} - ${points[1]}（ゲーム ${games[0]}-${games[1]}）${rallyMark}`;
 }
 
 // ---------- drawing ----------
@@ -368,9 +468,10 @@ function drawVideo(x, y, width, height) {
   ctx.restore();
 }
 function activeCaption(time) {
-  const [start, end] = range();
-  if (state.openingCaption && time < start + CAPTION_SECONDS) return state.openingCaption;
-  if (state.closingCaption && time > end - CAPTION_SECONDS) return state.closingCaption;
+  // ラリーカットした後の動画で「最初の4秒・最後の4秒」になるように、書き出し後の時間で判定する
+  const position = outputTime(time), length = totalLength();
+  if (state.openingCaption && position < CAPTION_SECONDS) return state.openingCaption;
+  if (state.closingCaption && position > length - CAPTION_SECONDS) return state.closingCaption;
   return "";
 }
 // 長い字幕は2行に分ける（お手本の動画も2行になっている）
@@ -480,7 +581,11 @@ $("videoFile").onchange = (event) => {
   url = URL.createObjectURL(file);
   $("videoName").textContent = file.name;
   eventsKey = `score-events:${file.name}:${file.size}`;
-  events = load(eventsKey) || [];
+  // 前の版は得点だけを配列で保存していたので、その形でも読めるようにする
+  const saved = load(eventsKey);
+  events = Array.isArray(saved) ? saved : (saved?.events || []);
+  rallies = Array.isArray(saved) ? [] : (saved?.rallies || []);
+  rallyStart = null;
   hint("読み込み中…");
   openVideo(url);
 };
@@ -490,9 +595,11 @@ vid.addEventListener("loadedmetadata", () => {
   $("tStart").value = 0; $("tEnd").value = duration.toFixed(1);
   $("trim").hidden = false;
   updateTrim();
-  for (const id of ["playBtn", "backBtn", "pointA", "pointB", "exportBtn", "exportBtn2"]) $(id).disabled = false;
+  for (const id of ["playBtn", "backBtn", "rallyBtn", "pointA", "pointB", "exportBtn", "exportBtn2"]) $(id).disabled = false;
   renderEvents();
-  hint(events.length ? `前回の記録（${events.length}件）を読み込みました。` : "「再生」を押して、点が決まるたびに選手のボタンを押してください。");
+  hint(events.length || rallies.length
+    ? `前回の記録（ラリー${rallies.length}件・得点${events.length}件）を読み込みました。`
+    : "「再生」を押して、ラリーの間は「ラリー中」を押しっぱなし、点が決まったら選手のボタンを押してください。");
   if (vid.readyState < 2) prime();
 });
 vid.addEventListener("error", () => {
@@ -521,6 +628,7 @@ function updateTrim() {
   let [start, end] = range();
   if (end - start < 0.5) { end = Math.min(Number($("tEnd").max), start + 0.5); $("tEnd").value = end; }
   $("vStart").textContent = start.toFixed(1); $("vEnd").textContent = end.toFixed(1); $("vLen").textContent = (end - start).toFixed(1);
+  renderRallies();
 }
 $("tStart").oninput = () => { updateTrim(); vid.currentTime = range()[0]; };
 $("tEnd").oninput = () => { updateTrim(); vid.currentTime = range()[1]; };
@@ -537,20 +645,38 @@ function loop(onTick) {
   };
   step();
 }
+// 「ラリーだけ再生」のとき、ラリーとラリーの間にいたら次のラリーの頭へ飛ぶ。最後のラリーが終わったら止める
+function skipToRally() {
+  if (!$("cutPreview").checked || !rallies.length) return false;
+  const time = vid.currentTime, list = segments();
+  if (list.some(segment => time >= segment.start && time < segment.end)) return false;
+  const next = list.find(segment => segment.start > time);
+  if (next) vid.currentTime = next.start; else vid.pause();
+  return true;
+}
 async function handlePlay() {
   if (!vid.paused) { vid.pause(); return; }
   const [start, end] = range();
   // 得点を記録しながら止めたり動かしたりするので、範囲の外にいるときだけ最初に戻す
   if (vid.currentTime < start || vid.currentTime >= end - 0.05) vid.currentTime = start;
+  if ($("cutPreview").checked && rallies.length) {
+    const list = segments();
+    if (vid.currentTime >= list[list.length - 1].end - 0.05) vid.currentTime = list[0].start;
+    else skipToRally();
+  }
   vid.muted = !$("sound").checked;
   try { await vid.play(); } catch { hint("再生できませんでした。もう一度押してください。", true); return; }
   $("playBtn").textContent = "一時停止";
-  loop(() => { updateNow(); if (vid.currentTime >= range()[1]) vid.pause(); });
+  loop(() => { skipToRally(); updateNow(); if (vid.currentTime >= range()[1]) vid.pause(); });
 }
 async function handleBack() { await seekTo(Math.max(range()[0], vid.currentTime - 5)); updateNow(); }
 $("playBtn").onclick = handlePlay;
 $("backBtn").onclick = handleBack;
-vid.addEventListener("pause", () => { $("playBtn").textContent = "再生"; });
+vid.addEventListener("pause", () => {
+  $("playBtn").textContent = "再生";
+  // 再生が止まったらラリーも区切る（押しっぱなしのまま止めても、区間が開きっぱなしにならないように）
+  if (!exporting) endRally();
+});
 
 // ---------- export ----------
 let downloads = null, audioContext = null, audioDestination = null;
@@ -560,15 +686,18 @@ function pickType() {
 }
 function hint(message, isError) { const element = $("hint"); element.textContent = message; element.className = "hint" + (isError ? " err" : ""); }
 let exporting = false;
-const EXPORT_LOCKED = ["exportBtn", "exportBtn2", "playBtn", "backBtn", "pointA", "pointB", "undoBtn"];
+const EXPORT_LOCKED = ["exportBtn", "exportBtn2", "playBtn", "backBtn", "rallyBtn", "pointA", "pointB", "undoBtn"];
 async function handleExport() {
   if (exporting) return;
   if (!window.MediaRecorder || !cv.captureStream) { hint("このブラウザでは動画を書き出せません。iPhone の Safari か、パソコンの Chrome で開いてください。", true); return; }
   const type = pickType();
-  const [start, end] = range();
-  // 1. 準備：ボタンを止めて、使う範囲のはじめに戻す
+  const list = segments();
+  if (!list.length) { hint("使う範囲の中にラリーがありません。使う範囲かラリーの記録を見直してください。", true); return; }
+  const length = totalLength();
+  // 1. 準備：ボタンを止めて、最初の区間のはじめに戻す
+  vid.pause(); endRally();
   exporting = true; EXPORT_LOCKED.forEach(id => $(id).disabled = true);
-  vid.pause(); await seekTo(start);
+  await seekTo(list[0].start);
   await document.fonts.ready;
   resizeCanvas(); drawFrame();
 
@@ -594,12 +723,27 @@ async function handleExport() {
   hint("書き出し中… 画面を閉じたり、他のアプリに切り替えたりしないでください。");
   vid.muted = false;
   recorder.start(500);
-  try { await vid.play(); } catch { recorder.stop(); }
-  loop(() => {
-    $("bar").style.width = Math.min(100, (vid.currentTime - start) / (end - start) * 100) + "%";
-    if (vid.currentTime >= end && recorder.state === "recording") { vid.pause(); recorder.stop(); }
-  });
-  vid.addEventListener("ended", () => recorder.state === "recording" && recorder.stop(), { once: true });
+  // 区間ごとに「再生して録画 → 録画を一時停止 → 次の区間へ移動 → 録画を再開」を繰り返す。
+  // 移動中は録画を止めておくので、カットした部分は書き出した動画に入らない
+  for (const [index, segment] of list.entries()) {
+    if (index > 0) {
+      recorder.pause();
+      await seekTo(segment.start);
+      drawFrame();
+      recorder.resume();
+    }
+    const played = await vid.play().then(() => true).catch(() => false);
+    if (!played) break;
+    await new Promise(resolve => {
+      const finish = () => { vid.removeEventListener("ended", finish); vid.pause(); resolve(); };
+      vid.addEventListener("ended", finish);
+      loop(() => {
+        $("bar").style.width = Math.min(100, outputTime(vid.currentTime) / length * 100) + "%";
+        if (vid.currentTime >= segment.end && !vid.paused) finish();
+      });
+    });
+  }
+  if (recorder.state !== "inactive") recorder.stop();
   await finished;
 
   // 3. ファイルにして保存・共有する
